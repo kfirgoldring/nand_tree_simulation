@@ -270,14 +270,28 @@ def p_tree(psi, graph: Graph) -> float:
 # --------------------------------------------------------------------------
 # Defaults
 # --------------------------------------------------------------------------
-def default_L(n: int, alpha: float = 16.0, min_L: int = 24) -> int:
+# Paper's scaling coefficient in  L = gamma * sqrt(N).  The good-transmission
+# window is |E| < 1/(16*sqrt(N)); since the packet's energy width is ~1/L, clean
+# transmit/reflect contrast needs gamma >> 16.  gamma = 16 is the borderline
+# value that still gives good contrast for n <= 4.
+default_gamma = 16.0
+
+
+def L_from_gamma(gamma: float, n: int, min_L: int = 8) -> int:
+    """Packet length  L = gamma * sqrt(N),  N = 2**n  (the paper's scaling).
+
+    Floored at min_L so the packet stays wide enough to be visible/meaningful.
+    """
+    return max(min_L, int(round(gamma * np.sqrt(2 ** n))))
+
+
+def default_L(n: int, alpha: float = default_gamma, min_L: int = 24) -> int:
     """Packet length ~ alpha * sqrt(N), but at least min_L to stay visible.
 
-    The paper requires L >> 16*sqrt(N) so the packet's energy width 1/L sits
-    well inside the good-transmission window |E| < 1/(16*sqrt(N)).  alpha = 16
-    realises that scaling and gives clean transmit/reflect contrast for n<=4.
+    Thin wrapper over `L_from_gamma` (with alpha playing the role of gamma) that
+    keeps a larger visibility floor for the self-test defaults.
     """
-    return max(min_L, int(round(alpha * np.sqrt(2 ** n))))
+    return max(min_L, L_from_gamma(alpha, n, min_L=1))
 
 
 def default_M(L: int) -> int:

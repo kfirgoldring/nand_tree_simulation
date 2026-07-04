@@ -15,8 +15,9 @@ t_run = L/2 we measure the projector onto the right half of the runway.
 The window has the matplotlib plots on the right and a native Tk control panel
 on the left:
 
-  * Sliders:  n (tree depth, N=2**n leaves),  L (packet length),  M/L (runway
-    half-length as a multiple of L),  and the time scrubber.
+  * Sliders:  n (tree depth, N=2**n leaves),  gamma (sets packet length via the
+    paper's scaling L = gamma*sqrt(N)),  M/L (runway half-length as a multiple of
+    L),  and the time scrubber.
   * Play / Pause:  animate the precomputed propagation.
   * All 0 / All 1 / force NAND=1 / force NAND=0:  quick instances.
   * Leaf toggles:  click a leaf box to flip its input bit (green = 1 = edge
@@ -57,7 +58,8 @@ class PlotModel:
     def __init__(self, fig: Figure):
         self.fig = fig
         self.n = 2
-        self.L = P.default_L(self.n)
+        self.gamma = P.default_gamma          # L = gamma * sqrt(N)
+        self.L = P.L_from_gamma(self.gamma, self.n)
         self.m_ratio = 2.6
         self.bits = P.bits_for_target(self.n, 1)   # start with a transmit case
         self.frame = 0
@@ -244,7 +246,8 @@ class PlotModel:
         g = self.graph
         f = self.frame
         return (f"n = {self.n}    N = {2**self.n} leaves    "
-                f"L = {self.L}    M = {self.M}    dim = {g.dim}\n"
+                f"γ = {self.gamma:g}    L = γ√N = {self.L}    "
+                f"M = {self.M}    dim = {g.dim}\n"
                 f"t_run = L/2 = {P.t_run(self.L):.1f}        "
                 f"current t = {self.times[f]:.1f}\n"
                 f"P_right = {self.pr_t[f]:.3f}    "
@@ -324,8 +327,9 @@ class DemoApp:
         sl.columnconfigure(1, weight=1)
         self.s_n = self._add_slider(sl, 0, "n (depth)", 1, 4,
                                     self.model.n, self._on_n, fmt="{:.0f}")
-        self.s_L = self._add_slider(sl, 1, "L (packet)", 8, 80,
-                                    self.model.L, self._on_struct, fmt="{:.0f}")
+        self.s_gamma = self._add_slider(sl, 1, "γ  (L=γ√N)", 2, 40,
+                                        self.model.gamma, self._on_struct,
+                                        fmt="{:.1f}")
         self.s_M = self._add_slider(sl, 2, "M / L", 1.8, 4.0,
                                     self.model.m_ratio, self._on_struct,
                                     fmt="{:.1f}")
@@ -337,6 +341,9 @@ class DemoApp:
         row.pack(fill=tk.X, pady=(0, 8))
         self.b_play = ttk.Button(row, text="▶ Play", command=self._toggle_play)
         self.b_play.pack(side=tk.LEFT)
+        self.b_restart = ttk.Button(row, text="⟲ Restart",
+                                    command=self._restart)
+        self.b_restart.pack(side=tk.LEFT, padx=(6, 0))
         self.wave_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(row, text="show wave", variable=self.wave_var,
                         command=self._on_wave).pack(side=tk.RIGHT)
@@ -449,6 +456,15 @@ class DemoApp:
             self.root.after_cancel(self._play_job)
             self._play_job = None
 
+    def _restart(self):
+        # stop playback and rewind the animation to the first frame
+        if self.playing:
+            self._toggle_play()
+        self.model.set_frame(0)
+        self._sync_time_slider(0)
+        self._refresh_readouts()
+        self.canvas.draw_idle()
+
     def _play_step(self):
         if not self.playing:
             return
@@ -474,12 +490,11 @@ class DemoApp:
             new_n = int(round(float(self.s_n.get())))
             if new_n != m.n:
                 m.n = new_n
-                m.L = P.default_L(m.n)
-                self._sync_slider(self.s_L, m.L)
                 m.bits = P.bits_for_target(m.n, 1)
                 self._build_leaf_buttons()
-        m.L = int(round(float(self.s_L.get())))
+        m.gamma = round(float(self.s_gamma.get()), 1)
         m.m_ratio = round(float(self.s_M.get()), 1)
+        m.L = P.L_from_gamma(m.gamma, m.n)   # L = gamma * sqrt(N)
         m.resimulate()
         self._sync_time_slider(0)
         self._refresh_readouts()
